@@ -318,6 +318,62 @@ def design_network(input_dim, num_classes, seed=0):
 
     return model, {'accuracy': accuracy, 'x': x_test, 'y': y_test}
 
-# Step 13 - improve_generalization (not yet solved)
-# TODO: implement
+# Step 13 - improve_generalization
+def improve_generalization(baseline_model_fn, x_train, y_train, x_val, y_val, seed=0):
+    loss_fn = make_loss()
+    lr, epochs, batch_size = 0.05, 100, 32
+
+    def evaluate(model):
+        logits, _ = model['forward'](x_val)
+        preds = logits.argmax(axis=1)
+        return float(np.mean(preds == y_val)), preds
+
+    def fit(model, weight_decay, early_stop=False):
+        optimizer = make_optimizer(model['params'], lr=lr)
+        rng = np.random.default_rng(seed)
+        N = x_train.shape[0]
+        best_acc, best_params = -1.0, None
+        for epoch in range(epochs):
+            perm = rng.permutation(N)
+            for start in range(0, N, batch_size):
+                idx = perm[start:start + batch_size]
+                logits, caches = model['forward'](x_train[idx])
+                _, dlogits = loss_fn(logits, y_train[idx])
+                _, grads = model['backward'](dlogits, caches)
+                if weight_decay > 0:                      # L2: add λ·W to dL/dW
+                    for p, g in zip(model['params'], grads):
+                        if 'W' in p:
+                            g['W'] = g['W'] + weight_decay * p['W']
+                optimizer['step'](grads)
+            if early_stop:                                # snapshot best epoch
+                acc, _ = evaluate(model)
+                if acc > best_acc:
+                    best_acc = acc
+                    best_params = [{k: v.copy() for k, v in p.items()}
+                                   for p in model['params']]
+        if early_stop:                                    # restore in place
+            for p, bp in zip(model['params'], best_params):
+                for k in p:
+                    p[k][...] = bp[k]
+        return model
+
+    # Baseline: plain SGD, fresh model
+    baseline = fit(baseline_model_fn(), weight_decay=0.0)
+    baseline_acc, _ = evaluate(baseline)
+
+    # Improved: weight decay + early stopping, fresh model per setting
+    best = None
+    for wd in [0.0, 1e-3, 1e-2, 3e-2, 0.1]:
+        model = fit(baseline_model_fn(), weight_decay=wd, early_stop=True)
+        acc, preds = evaluate(model)
+        if best is None or acc > best[0]:
+            best = (acc, preds, model)
+
+    val_acc, preds, model = best
+    return {
+        'val_accuracy': val_acc,
+        'baseline_val_accuracy': baseline_acc,
+        'predictions': preds,
+        'model': model,
+    }
 
