@@ -281,8 +281,42 @@ def train(model, loss_fn, optimizer, x, y, epochs, batch_size, seed=0):
     
     return history
 
-# Step 12 - design_network (not yet solved)
-# TODO: implement
+# Step 12 - design_network
+def design_network(input_dim, num_classes, seed=0):
+    rng = np.random.default_rng(seed)
+
+    # Dataset: concentric shells (nonlinear, not linearly separable)
+    N = 3000
+    y = rng.integers(0, num_classes, N)                    # high is exclusive
+    dirs = rng.normal(size=(N, input_dim))
+    dirs /= np.linalg.norm(dirs, axis=1, keepdims=True)    # random unit directions
+    radius = y + 0.5 + rng.uniform(0.25, 0.75, N)          # class k -> band [k+0.75, k+1.25]
+    x = dirs * radius[:, None]
+
+    perm = rng.permutation(N)
+    n_train = int(0.8 * N)
+    tr, te = perm[:n_train], perm[n_train:]
+    x_train, y_train = x[tr], y[tr]
+    x_test,  y_test  = x[te], y[te]
+
+    # Model: hidden layers + ReLU, raw logits out
+    H = 64
+    model = make_sequential([
+        make_dense(input_dim, H, initialize_weights), make_activation(),
+        make_dense(H, H, initialize_weights),         make_activation(),
+        make_dense(H, num_classes, initialize_weights),
+    ])
+    optimizer = make_optimizer(model['params'], lr=0.05)
+    loss_fn = make_loss()
+
+    train(model, loss_fn, optimizer, x_train, y_train,
+          epochs=100, batch_size=32, seed=seed)
+
+    # Evaluate on the held-out set and return that same set
+    logits, _ = model['forward'](x_test)
+    accuracy = float(np.mean(logits.argmax(axis=1) == y_test))
+
+    return model, {'accuracy': accuracy, 'x': x_test, 'y': y_test}
 
 # Step 13 - improve_generalization (not yet solved)
 # TODO: implement
