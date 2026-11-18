@@ -211,8 +211,22 @@ def forward_backward(model, loss_fn, x, y):
     dx, param_grads = model['backward'](d_logits, caches)
     return loss, param_grads
 
-# Step 9 - make_optimizer (not yet solved)
-# TODO: implement
+# Step 9 - make_optimizer
+def make_optimizer(params, lr=1e-2, kind='sgd'):
+    def _update(p, g):
+        if isinstance(p, dict):
+            for k in p:
+                _update(p[k], g[k])
+        elif isinstance(p, (list, tuple)):
+            for pi, gi in zip(p, g):
+                _update(pi, gi)
+        else:
+            p -= lr * g
+
+    def step(grads):
+        _update(params, grads)
+
+    return {'step': step}
 
 # Step 10 - train_step (not yet solved)
 # TODO: implement
